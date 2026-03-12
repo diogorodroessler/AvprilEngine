@@ -1,8 +1,11 @@
 pub mod core;
 pub mod engine;
 
+use std::time::Duration;
+
 use bevy::{
     camera::prelude::*,
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     image::{
         ImageAddressMode,
         ImageFilterMode,
@@ -10,39 +13,77 @@ use bevy::{
         ImageSamplerDescriptor
     },
     input::mouse::MouseMotion,
-    post_process::motion_blur::MotionBlur,
+    // post_process::motion_blur::MotionBlur,
     prelude::*,
-    window::{CursorGrabMode, CursorOptions}
+    time::common_conditions::on_timer,
+    window::{CursorGrabMode, CursorOptions},
+    animation::{AnimationPlayer, AnimationClip},
+    animation::graph::{AnimationNodeIndex},
+    ecs::query::Added,
+};
+use bevy_rapier3d::{
+    plugin::{NoUserData, RapierPhysicsPlugin}, prelude::{Collider, CollisionEvent, LockedAxes, RapierConfiguration, RigidBody, Velocity}, render::RapierDebugRenderPlugin
 };
 
+/// Player Component for the moviment
 #[derive(Component)]
 struct Player;
 
+/// Animation Player
+#[derive(Resource)]
+struct PlayerAnimationGraph {
+    graph: Handle<AnimationGraph>,
+    node: AnimationNodeIndex,
+}
+
+/// Part of Player Moviments
+/// In the case for Player Camera Fps style
 #[derive(Component)]
 struct CameraPitch {
     #[allow(unused)]
     pitch: f32,
 }
 
+/// Sounds for Player
+#[derive(Component)]
+struct FootstepsTimer(Timer);
+
+/// For print Gpu, Cpu usage
+#[derive(Component)]
+struct FpsText;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(RapierDebugRenderPlugin::default())
         .add_systems(Startup, setup)
         .add_systems(Update, (
             draw_cursor,
             player_movement,
             mouse_look,
+            // IF 'print_cpu_gpu_label_system' ONLY DEBUG SYSTEM, PLEASE
+            print_cpu_gpu_label_system
+                .run_if(on_timer(
+                    Duration::from_secs_f32(0.25)
+                )
+            ),
+            player_animation,
+            player_collision_damage,
         ))
         .run();
 }
 
 /// set up a simple 3D scene
 fn setup(
-    asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // For Animation Players params
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     //Directional Light
     commands.insert_resource(GlobalAmbientLight {
@@ -83,38 +124,122 @@ fn setup(
         })),
         Transform::from_xyz(0.0, -0.65, 0.0).with_scale(Vec3::splat(80.)),
     ));
-    // Spawn Player sequence of commands.spawn
-    spawn_player(asset_server, commands);
+    // Spawn Gpu and Cpu Text Label
+    commands.spawn((
+        Text::new("USAGE SYSTEM"),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(5),
+            left: px(5),
+            ..Default::default()
+        },
+        FpsText,
+    ));
+    // Setup Animations from Player
+    let clip: Handle<AnimationClip> =
+        asset_server.load("models/helena/helena.glb#Animation0");
+    let (graph, node) = AnimationGraph::from_clip(clip);
+    let graph_handle = graphs.add(graph);
+    commands.insert_resource(PlayerAnimationGraph {
+        graph: graph_handle,
+        node,
+    });
+    // Physics from global universe
+    commands.spawn(RapierConfiguration {
+        force_update_from_transform_changes: false,
+        gravity: Vec3::new(0.0, -9.81, 0.0),
+        physics_pipeline_active: true,
+        scaled_shape_subdivision: 10
+    });
+    // Physics from (Wall, Ground, etc...)
+    commands.spawn((
+        RigidBody::Fixed,
+        Collider::cuboid(50.0, 1.0, 50.0),
+        Transform::from_xyz(0.0, -1.0, 0.0),
+    ));
+
+    // TEST: Spawn Simple Mesh with animation
+    commands.spawn((
+        SceneRoot(
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/helena/helena.glb#Scene0"))
+        ),
+        Transform::from_xyz(0.0, 0.0, 0.0)
+            .looking_at(Vec3::ZERO, Vec3::Y)
+            .with_scale(Vec3 { x: 0.01, y: 0.01, z: 0.01 }),
+    ));
+    // TEST: Boxes for test the Physics
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            unlit: true,
+            base_color: Color::linear_rgb(0.1, 0.6, 1.0),
+            ..default()
+        })),
+    ));
+
+    // Spawn Player
+    spawn_player(commands);
 }
 
 /// Spawn Player with seguiments of commands.spawn
 /// It uses in the function 'setup'
-fn spawn_player(asset_server: Res<AssetServer>, mut commands: Commands) {
+fn spawn_player(
+    mut commands: Commands,
+) {
     commands
         .spawn((
             Player,
-            Transform::from_xyz(0.0, 1.0, 5.0),
+            RigidBody::Dynamic,
+            Collider::capsule_y(0.9, 0.4),
+            Velocity::default(),
+            LockedAxes::ROTATION_LOCKED,
+            Transform::from_xyz(0.0, 3.0, 5.0),
             GlobalTransform::default(),
+            FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
         ))
         .with_children(|parent| {
             parent.spawn((
                 Camera3d::default(),
-                MotionBlur {
-                    shutter_angle: 1.0,
-                    samples: 2,
-                },
-                Transform::default(),
+                // MotionBlur {
+                //     shutter_angle: 0.5,
+                //     samples: 0,
+                // },
+                Transform::from_xyz(0.0, 0.6, 0.0),
                 CameraPitch { pitch: 0.0 },
             ));
         }
     );
-    // Load Big Boss 'Resource Assets'
-    commands.spawn((
-        SceneRoot(
-            asset_server.load("models/bigboss/bb.glb#Scene0")
-        ),
-        Transform::from_xyz(0.0, 0.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+}
+
+/// Player damage for collision
+fn player_collision_damage(
+    mut collision_events: MessageReader<CollisionEvent>,
+    velocities: Query<&Velocity>,
+) {
+    for event in collision_events.read() {
+        if let CollisionEvent::Started(e1, e2, _) = event {
+            if let (Ok(v1), Ok(v2)) = (velocities.get(*e1), velocities.get(*e2)) {
+                let impact = (v1.linvel - v2.linvel).length();
+                if impact >= 8.0 {
+                    // Take Hit On Damage here
+                    // Damage for Impact
+                    println!("You got the Hit for Impact");
+                }
+            }
+        }
+    }
+}
+
+/// Player Animation abstractor
+fn player_animation(
+    mut commands: Commands,
+    mut players: Query<(Entity, &mut AnimationPlayer), Added<AnimationPlayer>>,
+    graph: Res<PlayerAnimationGraph>,
+) {
+    for (entity, mut player) in &mut players {
+        commands.entity(entity).insert(AnimationGraphHandle(graph.graph.clone()));
+        player.play(graph.node).repeat();
+    }
 }
 
 /// Mouse Look with angle of 90 degree
@@ -145,24 +270,57 @@ fn mouse_look(
 
 /// Player moviments with Keyboard Commands ('W,A,S,D')
 fn player_movement(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut query: Query<&mut Transform, With<Player>>,
+    mut query_sounds: Query<&mut FootstepsTimer, With<Player>>,
     time: Res<Time>,
 ) {
     let mut transform = query.single_mut().unwrap();
     let mut direction = Vec3::ZERO;
 
+    let mut timer_tick = query_sounds.single_mut().unwrap();
+
     if keyboard.pressed(KeyCode::KeyW) {
         direction += *transform.forward();
+
+        timer_tick.0.tick(time.delta());
+        if timer_tick.0.just_finished() {
+            commands.spawn(AudioPlayer::new(
+                asset_server.load("sounds/steps/data_pion-st3-footstep-sfx-323056.ogg")
+            ));
+        }
     }
     if keyboard.pressed(KeyCode::KeyS) {
         direction -= *transform.forward();
+
+        timer_tick.0.tick(time.delta());
+        if timer_tick.0.just_finished() {
+            commands.spawn(AudioPlayer::new(
+                asset_server.load("sounds/steps/data_pion-st2-footstep-sfx-323055.ogg")
+            ));
+        }
     }
     if keyboard.pressed(KeyCode::KeyA) {
         direction -= *transform.right();
+
+        timer_tick.0.tick(time.delta());
+        if timer_tick.0.just_finished() {
+            commands.spawn(AudioPlayer::new(
+                asset_server.load("sounds/steps/data_pion-st2-footstep-sfx-323055.ogg")
+            ));
+        }
     }
     if keyboard.pressed(KeyCode::KeyD) {
         direction += *transform.right();
+
+        timer_tick.0.tick(time.delta());
+        if timer_tick.0.just_finished() {
+            commands.spawn(AudioPlayer::new(
+                asset_server.load("sounds/steps/data_pion-st1-footstep-sfx-323053.ogg")
+            ));
+        }
     }
 
     direction.y = 0.0;
@@ -177,7 +335,7 @@ fn draw_cursor(
     mut cursor: Query<&mut CursorOptions>,
 ) {
     let mut cur_ops = cursor.single_mut().unwrap();
-    
+
     if key.just_pressed(KeyCode::Escape) {
         cur_ops.visible = true;
         cur_ops.grab_mode = CursorGrabMode::None;
@@ -188,18 +346,6 @@ fn draw_cursor(
         cur_ops.grab_mode = CursorGrabMode::Locked;
     }
 }
-
-/// Write Text in the Screen Commands Keyboard
-// fn keyboard_inputs(
-//     presses: Res<ButtonInput<KeyCode>>,
-//     text: Single<Entity, With<Text>>,
-//     mut writer: TextUiWriter,
-//     // mut camera: ResMut<CameraMode>,
-// ) {
-
-//     let entity = *text;
-//     *writer.text(entity, 1) = format!("GetPosition: {:.2}\n", inst.get_position());
-// }
 
 fn uv_debug_texture() -> Image {
     use bevy::{asset::RenderAssetUsages, render::render_resource::*};
@@ -235,4 +381,28 @@ fn uv_debug_texture() -> Image {
         ..ImageSamplerDescriptor::linear()
     });
     img
+}
+
+/// Print Gpu and Cpu usage
+fn print_cpu_gpu_label_system(
+    diagnostic: Res<DiagnosticsStore>,
+    mut query: Query<Entity, With<FpsText>>,
+    mut writer: TextUiWriter,
+) {
+    let entity = query.single_mut().unwrap();
+
+    let fps = diagnostic
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|d| d.smoothed())
+    ;
+    let frame_ms = diagnostic
+        .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+        .and_then(|d| d.smoothed())
+    ;
+
+    if let (Some(fps), Some(ms)) = (fps, frame_ms) {
+        // Try Add an delay/sleep for the pause game and show details
+        *writer.text(entity, 0) =
+            format!("Fps [{:.0}] | FrameTime [{:.2}] ms", fps, ms);
+    }
 }
