@@ -22,8 +22,31 @@ use bevy::{
     ecs::query::Added,
 };
 use bevy_rapier3d::{
-    plugin::{NoUserData, RapierPhysicsPlugin}, prelude::{Collider, CollisionEvent, LockedAxes, RapierConfiguration, RigidBody, Velocity}, render::RapierDebugRenderPlugin
+    plugin::{NoUserData, RapierPhysicsPlugin},
+    prelude::{
+        ActiveEvents,
+        AdditionalMassProperties,
+        Collider,
+        CollisionEvent,
+        LockedAxes,
+        RapierConfiguration,
+        RigidBody,
+        Velocity
+    },
+    render::RapierDebugRenderPlugin,
 };
+use bevy_renet::{RenetClient, RenetClientPlugin, RenetServer};
+use bevy_replicon::{
+    RepliconPlugins,
+    prelude::Replicated
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
+
+/// Channel of Network, In Renet all pass for Channels numerics
+pub const INPUT_CHANNEL: u8 = 0;
 
 /// Player Component for the moviment
 #[derive(Component)]
@@ -34,6 +57,12 @@ struct Player;
 struct PlayerAnimationGraph {
     graph: Handle<AnimationGraph>,
     node: AnimationNodeIndex,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PlayerInputNetwork {
+    pub forward: f32,
+    pub side: f32,
 }
 
 /// Part of Player Moviments
@@ -58,9 +87,12 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
+        .add_plugins(RepliconPlugins)
+        .add_plugins(RenetClientPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (
             draw_cursor,
+            // Player with Client Network
             player_movement,
             mouse_look,
             // IF 'print_cpu_gpu_label_system' ONLY DEBUG SYSTEM, PLEASE
@@ -71,6 +103,8 @@ fn main() {
             ),
             player_animation,
             player_collision_damage,
+            // Server Network abstration
+            receive_input_from_clients,
         ))
         .run();
 }
@@ -192,10 +226,14 @@ fn spawn_player(
             RigidBody::Dynamic,
             Collider::capsule_y(0.9, 0.4),
             Velocity::default(),
+            engine::network::components::Velocity { x: 0.0, y: 0.0, z: 0.0 },
+            ActiveEvents::COLLISION_EVENTS,
             LockedAxes::ROTATION_LOCKED,
+            AdditionalMassProperties::Mass(70.0),
             Transform::from_xyz(0.0, 3.0, 5.0),
             GlobalTransform::default(),
             FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
+            Replicated
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -276,6 +314,7 @@ fn player_movement(
     mut query: Query<&mut Transform, With<Player>>,
     mut query_sounds: Query<&mut FootstepsTimer, With<Player>>,
     time: Res<Time>,
+    mut client: ResMut<RenetClient>,
 ) {
     let mut transform = query.single_mut().unwrap();
     let mut direction = Vec3::ZERO;
@@ -327,6 +366,26 @@ fn player_movement(
     let speed = 5.0;
 
     transform.translation += direction.normalize_or_zero() * speed * time.delta_secs();
+
+    let input_network = PlayerInputNetwork { forward: direction.z, side: direction.x };
+    let message = bincode::serialize(&input_network).unwrap();
+
+    client.send_message(INPUT_CHANNEL, message);
+}
+
+fn receive_input_from_clients(
+    mut server: ResMut<RenetServer>,
+) {
+    let clients: Vec<_> = server.clients_id();
+    for client_id in clients {
+        while let Some(message) = server.receive_message(client_id, INPUT_CHANNEL) {
+            let input: PlayerInputNetwork = bincode::deserialize(&message).unwrap();
+
+            println!("[Player Network Test] Client: {} | Input: {:?}", client_id, input);
+
+            /* HERE YOU MOVEMENT THE PLAYER ASSOCIETED */
+        }
+    }
 }
 
 fn draw_cursor(

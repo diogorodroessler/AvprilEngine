@@ -25,3 +25,7 @@ bevy_ui = "0.18.1"
 #naga = "28.0.0"
 termcolor = "1.4.1"
 bevy_rapier3d = "0.33.0"
+bevy_replicon = "0.39.1"
+bevy_renet = "4.0.1"
+serde = { version = "1", features = ["derive"] }
+bincode = "1.3"
