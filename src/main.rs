@@ -1,8 +1,10 @@
 pub mod core;
 pub mod engine;
 
+#[allow(unused_imports)]
 use std::time::Duration;
 
+#[allow(unused_imports)]
 use bevy::{
     camera::prelude::*,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -35,18 +37,8 @@ use bevy_rapier3d::{
     },
     render::RapierDebugRenderPlugin,
 };
-use bevy_renet::{RenetClient, RenetClientPlugin, RenetServer};
-use bevy_replicon::{
-    RepliconPlugins,
-    prelude::Replicated
-};
-use serde::{
-    Deserialize,
-    Serialize
-};
 
-/// Channel of Network, In Renet all pass for Channels numerics
-pub const INPUT_CHANNEL: u8 = 0;
+// ----------------------------------------------------------
 
 /// Player Component for the moviment
 #[derive(Component)]
@@ -57,12 +49,6 @@ struct Player;
 struct PlayerAnimationGraph {
     graph: Handle<AnimationGraph>,
     node: AnimationNodeIndex,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct PlayerInputNetwork {
-    pub forward: f32,
-    pub side: f32,
 }
 
 /// Part of Player Moviments
@@ -81,30 +67,27 @@ struct FootstepsTimer(Timer);
 #[derive(Component)]
 struct FpsText;
 
+// ----------------------------------------------------------
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
-        .add_plugins(RepliconPlugins)
-        .add_plugins(RenetClientPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (
             draw_cursor,
-            // Player with Client Network
             player_movement,
             mouse_look,
             // IF 'print_cpu_gpu_label_system' ONLY DEBUG SYSTEM, PLEASE
-            print_cpu_gpu_label_system
-                .run_if(on_timer(
-                    Duration::from_secs_f32(0.25)
-                )
-            ),
+            // print_cpu_gpu_label_system
+            //     .run_if(on_timer(
+            //         Duration::from_secs_f32(0.25)
+            //     )
+            // ),
             player_animation,
             player_collision_damage,
-            // Server Network abstration
-            receive_input_from_clients,
         ))
         .run();
 }
@@ -115,7 +98,6 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    // For Animation Players params
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
@@ -159,16 +141,16 @@ fn setup(
         Transform::from_xyz(0.0, -0.65, 0.0).with_scale(Vec3::splat(80.)),
     ));
     // Spawn Gpu and Cpu Text Label
-    commands.spawn((
-        Text::new("USAGE SYSTEM"),
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(5),
-            left: px(5),
-            ..Default::default()
-        },
-        FpsText,
-    ));
+    // commands.spawn((
+    //     Text::new("USAGE SYSTEM"),
+    //     Node {
+    //         position_type: PositionType::Absolute,
+    //         top: px(5),
+    //         left: px(5),
+    //         ..Default::default()
+    //     },
+    //     FpsText,
+    // ));
     // Setup Animations from Player
     let clip: Handle<AnimationClip> =
         asset_server.load("models/helena/helena.glb#Animation0");
@@ -209,6 +191,7 @@ fn setup(
             base_color: Color::linear_rgb(0.1, 0.6, 1.0),
             ..default()
         })),
+        RigidBody::Fixed,
     ));
 
     // Spawn Player
@@ -233,7 +216,6 @@ fn spawn_player(
             Transform::from_xyz(0.0, 3.0, 5.0),
             GlobalTransform::default(),
             FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
-            Replicated
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -314,12 +296,18 @@ fn player_movement(
     mut query: Query<&mut Transform, With<Player>>,
     mut query_sounds: Query<&mut FootstepsTimer, With<Player>>,
     time: Res<Time>,
-    mut client: ResMut<RenetClient>,
 ) {
     let mut transform = query.single_mut().unwrap();
     let mut direction = Vec3::ZERO;
 
     let mut timer_tick = query_sounds.single_mut().unwrap();
+
+    if keyboard.pressed(KeyCode::ShiftLeft) {
+        timer_tick.0.set_duration(Duration::from_secs(0));
+    }
+    else if keyboard.just_released(KeyCode::ShiftLeft) {
+        timer_tick.0.set_duration(Duration::from_secs(1));
+    }
 
     if keyboard.pressed(KeyCode::KeyW) {
         direction += *transform.forward();
@@ -327,7 +315,7 @@ fn player_movement(
         timer_tick.0.tick(time.delta());
         if timer_tick.0.just_finished() {
             commands.spawn(AudioPlayer::new(
-                asset_server.load("sounds/steps/data_pion-st3-footstep-sfx-323056.ogg")
+                asset_server.load("sounds/steps/w_forward.ogg")
             ));
         }
     }
@@ -337,7 +325,7 @@ fn player_movement(
         timer_tick.0.tick(time.delta());
         if timer_tick.0.just_finished() {
             commands.spawn(AudioPlayer::new(
-                asset_server.load("sounds/steps/data_pion-st2-footstep-sfx-323055.ogg")
+                asset_server.load("sounds/steps/s_backward.ogg")
             ));
         }
     }
@@ -347,7 +335,7 @@ fn player_movement(
         timer_tick.0.tick(time.delta());
         if timer_tick.0.just_finished() {
             commands.spawn(AudioPlayer::new(
-                asset_server.load("sounds/steps/data_pion-st2-footstep-sfx-323055.ogg")
+                asset_server.load("sounds/steps/a_left.ogg")
             ));
         }
     }
@@ -357,34 +345,21 @@ fn player_movement(
         timer_tick.0.tick(time.delta());
         if timer_tick.0.just_finished() {
             commands.spawn(AudioPlayer::new(
-                asset_server.load("sounds/steps/data_pion-st1-footstep-sfx-323053.ogg")
+                asset_server.load("sounds/steps/d_right.ogg")
             ));
         }
     }
 
     direction.y = 0.0;
-    let speed = 5.0;
 
-    transform.translation += direction.normalize_or_zero() * speed * time.delta_secs();
+    let speed = 0.45;
+    let speed_shift = 3.0;
 
-    let input_network = PlayerInputNetwork { forward: direction.z, side: direction.x };
-    let message = bincode::serialize(&input_network).unwrap();
-
-    client.send_message(INPUT_CHANNEL, message);
-}
-
-fn receive_input_from_clients(
-    mut server: ResMut<RenetServer>,
-) {
-    let clients: Vec<_> = server.clients_id();
-    for client_id in clients {
-        while let Some(message) = server.receive_message(client_id, INPUT_CHANNEL) {
-            let input: PlayerInputNetwork = bincode::deserialize(&message).unwrap();
-
-            println!("[Player Network Test] Client: {} | Input: {:?}", client_id, input);
-
-            /* HERE YOU MOVEMENT THE PLAYER ASSOCIETED */
-        }
+    if keyboard.pressed(KeyCode::ShiftLeft) {
+        transform.translation += direction.normalize_or_zero() * speed_shift * time.delta_secs();
+    }
+    else if !keyboard.pressed(KeyCode::ShiftLeft) {
+        transform.translation += direction.normalize_or_zero() * speed * time.delta_secs();
     }
 }
 
@@ -442,6 +417,7 @@ fn uv_debug_texture() -> Image {
     img
 }
 
+#[allow(unused)]
 /// Print Gpu and Cpu usage
 fn print_cpu_gpu_label_system(
     diagnostic: Res<DiagnosticsStore>,
@@ -449,7 +425,7 @@ fn print_cpu_gpu_label_system(
     mut writer: TextUiWriter,
 ) {
     let entity = query.single_mut().unwrap();
-
+    
     let fps = diagnostic
         .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|d| d.smoothed())
