@@ -1,13 +1,8 @@
 pub mod core;
 pub mod engine;
 
-// use std::time::Duration; // For Fps Text Debug
-
 use bevy::{
-    // diagnostic::{FrameTimeDiagnosticsPlugin}, // Uses only for FpsFrametimeDebugTextWriter in Debug Text writer in the screen
     prelude::*,
-    /* time::common_conditions::on_timer, // For Fps Text Debug */
-    window::{CursorGrabMode, CursorOptions},
 };
 use bevy_rapier3d::{
     plugin::{NoUserData, RapierPhysicsPlugin},
@@ -24,7 +19,7 @@ fn main() {
         .add_systems(
             Update,
             (
-                draw_cursor,
+                engine::on_game::InGameScreenSceneWorkflow::draw_cursor,
                 engine::player_controller::PlayerCharacter::player_movement,
                 engine::player_controller::PlayerCharacter::mouse_look,
                 engine::player_controller::PlayerCharacter::player_animation,
@@ -95,7 +90,7 @@ fn setup(
         Transform::from_xyz(0.0, -1.0, 0.0),
     ));
 
-    // --------------- TESTS ---------------
+    // --------------- CASE TESTS ---------------
 
     // TEST: Boxes for test the Physics
     commands.spawn((
@@ -108,7 +103,7 @@ fn setup(
         RigidBody::Fixed,
     ));
 
-    // --------------- LATEST Commands Functions ---------------
+    // --------------- Spawn Implementation ---------------
 
     // Spawn only player camera follow
     engine::player_controller::PlayerCharacter::spawn_player_camera(&mut commands);
@@ -119,23 +114,4 @@ fn setup(
         asset_server,
         graphs,
     );
-}
-
-/// Enable the cursor in the Game Screen
-fn draw_cursor(
-    mouse: Res<ButtonInput<MouseButton>>,
-    key: Res<ButtonInput<KeyCode>>,
-    mut cursor: Query<&mut CursorOptions>,
-) {
-    let mut cur_ops = cursor.single_mut().unwrap();
-
-    if key.just_pressed(KeyCode::Escape) {
-        cur_ops.visible = true;
-        cur_ops.grab_mode = CursorGrabMode::None;
-    }
-
-    if mouse.just_pressed(MouseButton::Left) {
-        cur_ops.visible = false;
-        cur_ops.grab_mode = CursorGrabMode::Locked;
-    }
 }

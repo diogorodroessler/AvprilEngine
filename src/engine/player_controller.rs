@@ -6,7 +6,6 @@ use bevy::{
     input::mouse::MouseMotion,
     // post_process::motion_blur::MotionBlur,
     prelude::*,
-    // time::common_conditions::on_timer, // FOR DEBUG
 };
 use bevy_rapier3d::prelude::{
     ActiveEvents, AdditionalMassProperties, Collider, CollisionEvent, LockedAxes, RigidBody,
@@ -40,6 +39,7 @@ pub struct FootstepsTimer(Timer);
 #[derive(Component)]
 /// All the into the memory
 pub struct PlayerCharacter;
+
 impl PlayerCharacter {
     /// Spawn Player Character with Physics(Dynamic)
     pub fn player_character(
@@ -48,7 +48,10 @@ impl PlayerCharacter {
         mut graphs: ResMut<Assets<AnimationGraph>>,
     ) {
         // Setup Animations from Player Character
-        let clip: Handle<AnimationClip> = asset_server.load("models/helena/helena.glb#Animation0");
+        let clip: Handle<AnimationClip> = asset_server.load(
+            /* Here Going por example: "models/helena/helena.glb#Animation0" */
+            "models/helena/helena.glb#Animation0"
+        );
         let (graph, node) = AnimationGraph::from_clip(clip);
         let graph_handle = graphs.add(graph);
         commands.insert_resource(PlayerAnimationGraph {
@@ -61,20 +64,29 @@ impl PlayerCharacter {
             .spawn((
                 SceneRoot(
                     asset_server.load(
-                        GltfAssetLabel::Scene(0).from_asset("models/helena/helena.glb#Scene0"),
+                        GltfAssetLabel::Scene(0).from_asset(
+                            /* Here Going for example: "models/helena/helena.glb#Scene0" */
+                            "models/helena/helena.glb#Scene0"
+                        ),
                     ),
                 ),
-                // Player Physics Collision
                 RigidBody::Dynamic,
                 Collider::capsule_y(0.9, 0.4),
                 Velocity::default(),
                 ActiveEvents::COLLISION_EVENTS,
                 LockedAxes::ROTATION_LOCKED,
                 AdditionalMassProperties::Mass(70.0),
+                /* ------ LEAVE COMMENTED YET ------ */
                 // Transform::from_xyz(0.0, 3.0, 5.0),
                 // GlobalTransform::default(),
                 // Transforms Global universe
             ))
+            // ------ CHECK: Player Character is broken in the scene, and not attach ------
+            // o Maybe I can do this in the other forms ;)
+            // ------
+            // TODO:
+            // o Player Attach;
+            // o Angle: 0.0 (FOR TOUCH IN THE GROUND);
             .insert((Transform::from_xyz(0.0, 3.0, 5.0)
                 .looking_at(Vec3::ZERO, Vec3::Y)
                 .with_scale(Vec3 {
@@ -89,6 +101,7 @@ impl PlayerCharacter {
         commands
             .spawn((
                 Player,
+                /* ------ LEAVE COMMENTED YET ------ */
                 // RigidBody::Dynamic,
                 // Collider::capsule_y(0.9, 0.4),
                 // Velocity::default(),
@@ -106,6 +119,7 @@ impl PlayerCharacter {
             .with_children(|parent| {
                 parent.spawn((
                     Camera3d::default(),
+                    /* ------ Example for add post-processing graphics ------ */
                     // MotionBlur {
                     //     shutter_angle: 0.5,
                     //     samples: 0,
