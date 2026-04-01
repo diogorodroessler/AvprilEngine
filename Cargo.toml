@@ -29,3 +29,4 @@ bevy_replicon = "0.39.1"
 bevy_renet = "4.0.1"
 serde = { version = "1", features = ["derive"] }
 bincode = "1.3"
+bevy_ufbx = "0.18.0"

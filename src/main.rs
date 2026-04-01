@@ -9,12 +9,14 @@ use bevy_rapier3d::{
     prelude::{Collider, RapierConfiguration, RigidBody},
     render::RapierDebugRenderPlugin,
 };
+use bevy_ufbx::FbxPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(RapierDebugRenderPlugin::default())
+        .add_plugins(FbxPlugin)
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -31,8 +33,8 @@ fn main() {
 
 /// set up a simple 3D scene
 fn setup(
+    /* --- Maybe can uses this last --- */
     #[allow(unused_variables, unused_mut)]
-    // For Uv Debug
     mut images: ResMut<Assets<Image>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -106,12 +108,5 @@ fn setup(
     // --------------- Spawn Implementation ---------------
 
     // Spawn only player camera follow
-    engine::player_controller::PlayerCharacter::spawn_player_camera(&mut commands);
-
-    // Spawn Player Character
-    engine::player_controller::PlayerCharacter::player_character(
-        &mut commands,
-        asset_server,
-        graphs,
-    );
+    engine::player_controller::PlayerCharacter::spawn_player_camera(&mut commands, asset_server, graphs);
 }

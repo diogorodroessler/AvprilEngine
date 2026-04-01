@@ -8,12 +8,17 @@ use bevy::{
     prelude::*,
 };
 use bevy_rapier3d::prelude::{
-    ActiveEvents, AdditionalMassProperties, Collider, CollisionEvent, LockedAxes, RigidBody,
+    ActiveEvents,
+    AdditionalMassProperties,
+    Collider,
+    CollisionEvent,
+    LockedAxes,
+    RigidBody,
     Velocity,
 };
 use std::time::Duration;
 
-/// Player Component for the moviment
+/// Player Component
 #[derive(Component)]
 pub struct Player;
 
@@ -24,8 +29,7 @@ pub struct PlayerAnimationGraph {
     node: AnimationNodeIndex,
 }
 
-/// Part of Player Moviments
-/// In the case for Player Camera Fps style
+/// Player Camera
 #[derive(Component)]
 pub struct CameraPitch {
     #[allow(unused)]
@@ -36,13 +40,15 @@ pub struct CameraPitch {
 #[derive(Component)]
 pub struct FootstepsTimer(Timer);
 
+/// Player Character Controller
 #[derive(Component)]
-/// All the into the memory
 pub struct PlayerCharacter;
 
 impl PlayerCharacter {
+
     /// Spawn Player Character with Physics(Dynamic)
-    pub fn player_character(
+    /// Spawn Player with seguiments of commands.spawn. It uses in the function 'setup'
+    pub fn spawn_player_camera(
         commands: &mut Commands,
         asset_server: Res<AssetServer>,
         mut graphs: ResMut<Assets<AnimationGraph>>,
@@ -59,75 +65,39 @@ impl PlayerCharacter {
             node,
         });
 
-        // Spawn Player Character with Physics(complete)
+        // Player Character
         commands
             .spawn((
-                SceneRoot(
-                    asset_server.load(
-                        GltfAssetLabel::Scene(0).from_asset(
-                            /* Here Going for example: "models/helena/helena.glb#Scene0" */
-                            "models/helena/helena.glb#Scene0"
-                        ),
-                    ),
-                ),
+                // Player Character
+                Player,
+                Transform::default(),
+                GlobalTransform::default(),
+                FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
+            ))
+            .insert((
+                // Physics
                 RigidBody::Dynamic,
-                Collider::capsule_y(0.9, 0.4),
+                Collider::capsule_y(0.0, 0.2),
                 Velocity::default(),
                 ActiveEvents::COLLISION_EVENTS,
                 LockedAxes::ROTATION_LOCKED,
                 AdditionalMassProperties::Mass(70.0),
-                /* ------ LEAVE COMMENTED YET ------ */
-                // Transform::from_xyz(0.0, 3.0, 5.0),
-                // GlobalTransform::default(),
-                // Transforms Global universe
             ))
-            // ------ CHECK: Player Character is broken in the scene, and not attach ------
-            // o Maybe I can do this in the other forms ;)
-            // ------
-            // TODO:
-            // o Player Attach;
-            // o Angle: 0.0 (FOR TOUCH IN THE GROUND);
-            .insert((Transform::from_xyz(0.0, 3.0, 5.0)
-                .looking_at(Vec3::ZERO, Vec3::Y)
-                .with_scale(Vec3 {
-                    x: 0.01,
-                    y: 0.01,
-                    z: 0.01,
-                }),));
-    }
-
-    /// Spawn Player with seguiments of commands.spawn. It uses in the function 'setup'
-    pub fn spawn_player_camera(commands: &mut Commands) {
-        commands
-            .spawn((
-                Player,
-                /* ------ LEAVE COMMENTED YET ------ */
-                // RigidBody::Dynamic,
-                // Collider::capsule_y(0.9, 0.4),
-                // Velocity::default(),
-                // engine::network::components::Velocity { x: 0.0, y: 0.0, z: 0.0 },
-                // ActiveEvents::COLLISION_EVENTS,
-                // LockedAxes::ROTATION_LOCKED,
-                // AdditionalMassProperties::Mass(70.0),
-                // Transform::from_xyz(0.0, 3.0, 5.0),
-                Transform::default(),
-                GlobalTransform::default(),
+            .insert((
+                // Camera
+                Camera3d::default(),
                 Visibility::default(),
                 InheritedVisibility::default(),
-                FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
+                // Transform::from_translation(Vec3::new(0.0, 1.0, 0.0)),
+                CameraPitch { pitch: 0.0 },
             ))
-            .with_children(|parent| {
-                parent.spawn((
-                    Camera3d::default(),
-                    /* ------ Example for add post-processing graphics ------ */
-                    // MotionBlur {
-                    //     shutter_angle: 0.5,
-                    //     samples: 0,
-                    // },
-                    Transform::from_xyz(0.0, 0.6, 0.0),
-                    CameraPitch { pitch: 0.0 },
-                ));
-            });
+            .insert((
+                // Player Objects
+                SceneRoot(
+                    asset_server.load("res_from/skinned_models_raw/Glock.fbx#Mesh0"),
+                ),
+                Transform::from_scale(Vec3::new(0.01, 0.01, 0.01)),
+            ));
     }
 
     /// Player damage for collision

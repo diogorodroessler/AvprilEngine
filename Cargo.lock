@@ -1874,6 +1874,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_ufbx"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce31af4df234bae92d017442aa63e5d20e18e53d04c3c149180752569818fc7e"
+dependencies = [
+ "bevy",
+ "serde",
+ "thiserror 2.0.18",
+ "ufbx",
+]
+
+[[package]]
 name = "bevy_ui"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6130,6 +6142,7 @@ dependencies = [
  "bevy_rapier3d",
  "bevy_renet",
  "bevy_replicon",
+ "bevy_ufbx",
  "bevy_ui",
  "bincode",
  "eframe",
@@ -6935,6 +6948,15 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ufbx"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf2324f07023fcd0507bb122c5406911e73f7b4f1056c903d740b57128bab84"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
