@@ -8,12 +8,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_rapier3d::prelude::{
-    ActiveEvents,
-    AdditionalMassProperties,
-    Collider,
-    CollisionEvent,
-    LockedAxes,
-    RigidBody,
+    ActiveEvents, AdditionalMassProperties, Collider, CollisionEvent, LockedAxes, RigidBody,
     Velocity,
 };
 use std::time::Duration;
@@ -21,6 +16,9 @@ use std::time::Duration;
 /// Player Component
 #[derive(Component)]
 pub struct Player;
+
+#[derive(Component)]
+pub struct CameraShake;
 
 /// Animation Player
 #[derive(Resource)]
@@ -45,7 +43,6 @@ pub struct FootstepsTimer(Timer);
 pub struct PlayerCharacter;
 
 impl PlayerCharacter {
-
     /// Spawn Player Character with Physics(Dynamic)
     /// Spawn Player with seguiments of commands.spawn. It uses in the function 'setup'
     pub fn spawn_player_camera(
@@ -56,7 +53,7 @@ impl PlayerCharacter {
         // Setup Animations from Player Character
         let clip: Handle<AnimationClip> = asset_server.load(
             /* Here Going por example: "models/helena/helena.glb#Animation0" */
-            "models/helena/helena.glb#Animation0"
+            "",
         );
         let (graph, node) = AnimationGraph::from_clip(clip);
         let graph_handle = graphs.add(graph);
@@ -65,53 +62,108 @@ impl PlayerCharacter {
             node,
         });
 
-        // Player Character
-        commands
+        // ----------------------- Player Character Old -----------------------
+        // commands
+        //     .spawn((
+        //         // Player Character
+        //         Player,
+        //         Transform::default(),
+        //         GlobalTransform::default(),
+        //         FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
+        //     ))
+        //     .insert((
+        //         // Physics
+        //         RigidBody::Dynamic,
+        //         Collider::capsule_y(0.0, 0.2),
+        //         Velocity::default(),
+        //         ActiveEvents::COLLISION_EVENTS,
+        //         LockedAxes::ROTATION_LOCKED,
+        //         AdditionalMassProperties::Mass(70.0),
+        //     ))
+        //     .insert((
+        //         // Camera
+        //         Camera3d::default(),
+        //         Visibility::default(),
+        //         InheritedVisibility::default(),
+        //         // Transform::from_translation(Vec3::new(0.0, 1.0, 0.0)),
+        //         CameraPitch { pitch: 0.0 },
+        //         CameraShake,
+        //     ))
+        //     // .insert((
+        //     //     // Player Objects
+        //     //     SceneRoot(asset_server.load("models/raquel/raquel.glb#Scene0")),
+        //     //     Transform::from_scale(Vec3::new(1.0, 1.0, 1.0)),
+        //     // ));
+        //     .with_children(|f| {
+        //         f.spawn((
+        //             SceneRoot(asset_server.load("models/raquel/raquel.glb#Scene0")),
+        //             Transform::from_scale(Vec3::new(1.0, 1.0, 1.0))
+        //                 .with_rotation(Quat::from_axis_angle(Vec3::new(60.0, 0.0, 0.0), 60.0)),
+        //         ));
+        //     });
+        // ----------------------- End Player Character Old -----------------------
+
+        let player = commands
             .spawn((
-                // Player Character
                 Player,
                 Transform::default(),
                 GlobalTransform::default(),
                 FootstepsTimer(Timer::from_seconds(0.45, TimerMode::Repeating)),
-            ))
-            .insert((
-                // Physics
+
+                // Física
                 RigidBody::Dynamic,
-                Collider::capsule_y(0.0, 0.2),
+                Collider::capsule_y(0.9, 0.3),
                 Velocity::default(),
-                ActiveEvents::COLLISION_EVENTS,
                 LockedAxes::ROTATION_LOCKED,
-                AdditionalMassProperties::Mass(70.0),
             ))
-            .insert((
-                // Camera
-                Camera3d::default(),
-                Visibility::default(),
-                InheritedVisibility::default(),
-                // Transform::from_translation(Vec3::new(0.0, 1.0, 0.0)),
+            .id();
+
+        // Camera pivot (pitch)
+        let camera_pivot = commands
+            .spawn((
+                Transform::from_translation(Vec3::new(0.0, 1.0, -2.0)),
+                GlobalTransform::default(),
                 CameraPitch { pitch: 0.0 },
             ))
-            .insert((
-                // Player Objects
-                SceneRoot(
-                    asset_server.load("res_from/skinned_models_raw/Glock.fbx#Mesh0"),
+            .id();
+
+        // Camera
+        let camera = commands
+            .spawn((
+                Camera3d::default(),
+                Transform::default(),
+            ))
+            .id();
+
+        // Modelo do personagem
+        let model = commands
+            .spawn((
+                SceneRoot(asset_server.load("models/raquel/raquel.glb#Scene0")),
+                Transform::from_rotation(
+                    Quat::from_rotation_y(90.0) // virar de costas std::f32::consts::PI
                 ),
-                Transform::from_scale(Vec3::new(0.01, 0.01, 0.01)),
-            ));
+            ))
+            .id();
+
+        // Hierarquia
+        commands.entity(player).add_child(camera_pivot);
+        commands.entity(camera_pivot).add_child(camera);
+        commands.entity(player).add_child(model);
     }
 
     /// Player damage for collision
     pub fn player_collision_damage(
         mut collision_events: MessageReader<CollisionEvent>,
         velocities: Query<&Velocity>,
+        mut camera: Query<&mut Transform, (With<Player>, With<CameraShake>)>,
+        mut time: Res<Time>,
     ) {
         for event in collision_events.read() {
             if let CollisionEvent::Started(e1, e2, _) = event {
                 if let (Ok(v1), Ok(v2)) = (velocities.get(*e1), velocities.get(*e2)) {
                     let impact = (v1.linvel - v2.linvel).length();
                     if impact >= 8.0 {
-                        // Take Hit On Damage here
-                        // Damage for Impact
+                        Self::camera_shake_damage(&mut camera, &mut time);
                         println!("You got the Hit for Impact");
                     }
                 }
@@ -157,6 +209,22 @@ impl PlayerCharacter {
         pitch_rot = pitch_rot.clamp(-1.54, 1.54);
 
         transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw_rot, pitch_rot, 0.0);
+    }
+
+    /// Camera shake for Player Character Damage
+    pub fn camera_shake_damage(
+        camera: &mut Query<&mut Transform, (With<Player>, With<CameraShake>)>,
+        time: &mut Res<Time>,
+    ) {
+        for mut transform in camera {
+            let t = time.elapsed_secs();
+
+            let shake_x = (t * 10.0).sin() * 0.1;
+            let shake_y = (t * 12.0).sin() * 0.1;
+
+            transform.translation.x = shake_x;
+            transform.translation.y = shake_y;
+        }
     }
 
     /// Player moviments with Keyboard Commands ('W,A,S,D')
@@ -225,6 +293,7 @@ impl PlayerCharacter {
         let speed = 0.45;
         let speed_shift = 3.0;
 
+        // Control Walking and Running Speed
         if keyboard.pressed(KeyCode::ShiftLeft) {
             transform.translation +=
                 direction.normalize_or_zero() * speed_shift * time.delta_secs();

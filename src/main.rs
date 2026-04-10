@@ -1,15 +1,19 @@
 pub mod core;
 pub mod engine;
 
-use bevy::{
-    prelude::*,
-};
+use bevy::prelude::*;
 use bevy_rapier3d::{
     plugin::{NoUserData, RapierPhysicsPlugin},
     prelude::{Collider, RapierConfiguration, RigidBody},
     render::RapierDebugRenderPlugin,
 };
 use bevy_ufbx::FbxPlugin;
+
+// ----------- CASE TESTS -----------
+
+/// Test Collision of Player Character
+#[derive(Component)]
+struct SphereCollisionTranslation;
 
 fn main() {
     App::new()
@@ -34,8 +38,7 @@ fn main() {
 /// set up a simple 3D scene
 fn setup(
     /* --- Maybe can uses this last --- */
-    #[allow(unused_variables, unused_mut)]
-    mut images: ResMut<Assets<Image>>,
+    #[allow(unused_variables, unused_mut)] mut images: ResMut<Assets<Image>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -95,18 +98,42 @@ fn setup(
     // --------------- CASE TESTS ---------------
 
     // TEST: Boxes for test the Physics
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+    //     MeshMaterial3d(materials.add(StandardMaterial {
+    //         unlit: true,
+    //         base_color: Color::linear_rgb(0.1, 0.6, 1.0),
+    //         ..default()
+    //     })),
+    //     RigidBody::Fixed,
+    // ));
+    // TEST: Boxes for test the Physics Damage
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        Mesh3d(meshes.add(Sphere::new(1.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            unlit: true,
+            // unlit: true,
             base_color: Color::linear_rgb(0.1, 0.6, 1.0),
             ..default()
         })),
-        RigidBody::Fixed,
+        RigidBody::Dynamic,
+        SphereCollisionTranslation,
     ));
-
     // --------------- Spawn Implementation ---------------
 
     // Spawn only player camera follow
-    engine::player_controller::PlayerCharacter::spawn_player_camera(&mut commands, asset_server, graphs);
+    engine::player_controller::PlayerCharacter::spawn_player_camera(
+        &mut commands,
+        asset_server,
+        graphs,
+    );
+}
+
+// ----------- CASE TESTS -----------
+
+/// Sphere moviments for test the collision of Player Character
+fn sphere_test_collision_pl_char(
+    player: Query<&mut Transform, With<SphereCollisionTranslation>>,
+    time: Res<Time>,
+) {
+    
 }
